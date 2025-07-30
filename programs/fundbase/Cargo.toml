@@ -24,7 +24,7 @@ custom-panic = []
 anchor-lang = "0.31.1"
 borsh = "1.5.7"
 borsh-derive = "1.5.7"
-anchor-spl = "0.31.1"
+anchor-spl = { version = "0.31.1", features = ["idl-build"] }
 
 [lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(target_os, values("solana"))'] }

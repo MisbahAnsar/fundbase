@@ -10,6 +10,7 @@ use crate::constants::*;
 use crate::error::*;
 use crate::context::*;
 use anchor_lang::prelude::*;
+use anchor_lang::solana_program::{program::invoke, system_instruction};
 
 pub fn create_campaign(
     ctx: Context<CreateCampaign>,
@@ -50,22 +51,34 @@ pub fn create_campaign(
     Ok(())
 }
 
-pub fn donate(
-    ctx: Context<Donate>,
-    amount: u64
-) -> Result<()> {
+pub fn donate(ctx: Context<Donate>, amount: u64) -> Result<()> {
     let campaign = &mut ctx.accounts.campaign;
 
     if campaign.donators.len() >= MAX_DONATORS {
         return Err(error!(FundbaseError::TooManyDonators));
     }
+
     if amount > MAX_DONATION_AMOUNT {
         return Err(error!(FundbaseError::DonationAmountTooHigh));
     }
 
-    **ctx.accounts.donator.to_account_info().try_borrow_mut_lamports()? -= amount;
-    **campaign.to_account_info().try_borrow_mut_lamports()? += amount;
+    // Transfer lamports from donator to campaign
+    let ix = system_instruction::transfer(
+        &ctx.accounts.donator.key(),
+        &campaign.key(),
+        amount,
+    );
 
+    invoke(
+        &ix,
+        &[
+            ctx.accounts.donator.to_account_info(),
+            campaign.to_account_info(),
+            ctx.accounts.system_program.to_account_info(),
+        ],
+    )?;
+
+    // Record the donation
     campaign.donators.push(ctx.accounts.donator.key());
     campaign.donations.push(amount);
 
@@ -77,15 +90,10 @@ pub fn donate(
     Ok(())
 }
 
-pub fn withdraw(
-    ctx: Context<Withdraw>,
-    amount: u64
-) -> Result<()> {
+pub fn withdraw(ctx: Context<Withdraw>, amount: u64) -> Result<()> {
     let campaign = &mut ctx.accounts.campaign;
 
-    let campaign_balance = campaign.to_account_info().lamports();
-
-    if amount > campaign_balance {
+    if amount > campaign.to_account_info().lamports() {
         return Err(error!(FundbaseError::InsufficientFunds));
     }
 
